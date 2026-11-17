@@ -25,4 +25,23 @@ nrow(fx_daily)
 
 sapply(raw_prices, function(x) sum(is.na(x)))
 
+#Part 2
+#2.1 Dates, prices and identifiers
+#firstly we fix dates
 
+prices_step1 <- raw_prices |>
+  mutate(
+    # first we check if it is YMD
+    is_ymd = str_detect(date, "^[0-9]{4}[./-]"),
+    # we assume the other cases are DMY
+    
+    clean_date = case_when(
+      is_ymd ~ ymd(date),
+      !is_ymd ~ dmy(date),
+      TRUE ~ NA_Date_
+    )
+  )
+
+sum(is.na(prices_step1$clean_date))
+class(prices_step1$clean_date)
+prices_step1$clean_date
