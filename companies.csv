@@ -1,0 +1,21 @@
+ticker,company,sector,currency
+ALPH,Alpha Systems,Technology,USD
+ALPA,Alpa Networks,Technology,USD
+ZEON,Zeon Devices,Technology,EUR
+QUAN,Quantum Logic,Technology,CZK
+VITA,Vita Research,Healthcare,USD
+VITO,Vito Medical,Healthcare,EUR
+MEDI,Medi Labs,Healthcare,GBP
+NURX,Nurex Care,Healthcare,CZK
+GRID,Grid Services,Utilities,USD
+GRIX,Grix Power,Utilities,EUR
+POWR,Power Works,Utilities,CZK
+WATR,Water Supply,Utilities,GBP
+FOOD,Food Supply,Consumer Staples,USD
+FODO,Fodo Retail,Consumer Staples,EUR
+GROC,Grocery Group,Consumer Staples,CZK
+SNAX,Snack Products,Consumer Staples,USD
+IRON,Iron Components,Industrials,USD
+IORN,Iorn Engineering,Industrials,EUR
+MACH,Machine Works,Industrials,USD
+BUIL,Build Systems,Industrials,EUR
