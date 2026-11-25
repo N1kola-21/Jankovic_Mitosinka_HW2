@@ -45,3 +45,8 @@ prices_step1 <- raw_prices |>
 sum(is.na(prices_step1$clean_date))
 class(prices_step1$clean_date)
 prices_step1$clean_date
+
+#We get a warning that observations failed to parse. We try to check which
+prices_step1$date[is.na(prices_step1$clean_date)]
+#When inspecting first off all we get way less observations then the warning showed secondly none of these are a real date so we dont use them
+
