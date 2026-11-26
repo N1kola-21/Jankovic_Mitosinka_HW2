@@ -308,3 +308,81 @@ prices_dedup <- prices_step6 |>
 #Check: unique ticker-date keys
 prices_dedup |> count(clean_ticker, clean_date) |> filter(n > 1)   # must be 0 rows
 
+#2.3 Suspicious observations
+#invalid prices / volumes (flagged in 2.1)
+prices_dedup |> count(price_problem, volume_problem)
+
+#preliminary day-to-day changes, only rows with a valid price
+prices_ordered <- prices_dedup |>
+  filter(!price_problem) |>
+  arrange(clean_ticker, clean_date) |>
+  group_by(clean_ticker) |>
+  mutate(prev_date  = lag(clean_date),  prev_price = lag(clean_price),
+         next_date  = lead(clean_date), next_price = lead(clean_price),
+         change     = clean_price / prev_price - 1) |>
+  ungroup()
+
+large_changes <- prices_ordered |>
+  filter(abs(change) > 0.5) |>
+  select(row_id, clean_ticker, prev_date, prev_price, clean_date, clean_price,
+         next_date, next_price, change)
+
+large_changes |> print(n = Inf, width = Inf)
+
+#Decision rule: a change is a one-day spike if the NEXT price returns within 10 % of the PREVIOUS price
+spikes <- large_changes |> filter(abs(next_price / prev_price - 1) <= 0.10)
+
+suspicious_review <- large_changes |>
+  mutate(decision = case_when(
+    row_id %in% spikes$row_id ~ "exclude: one-day spike, next price returns to previous level",
+    paste(clean_ticker, prev_date) %in% paste(spikes$clean_ticker, spikes$clean_date) ~
+      "retain: correct price, large change only because previous day was a spike",
+    TRUE ~ "retain: persistent level shift, plausible market move"
+  ))
+
+suspicious_review |> count(decision)   # expected 8 / 8 / 11
+
+#Implement: mark spikes as excluded, keep everything else
+prices_step7 <- prices_dedup |>
+  mutate(spike_excluded = row_id %in% spikes$row_id,
+         usable_price   = !price_problem & !spike_excluded)
+
+#Check: after excluding spikes, only the 11 retained level shifts exceed 50 %
+prices_step7 |>
+  filter(usable_price) |>
+  arrange(clean_ticker, clean_date) |>
+  group_by(clean_ticker) |>
+  mutate(change = clean_price / lag(clean_price) - 1) |>
+  ungroup() |>
+  filter(abs(change) > 0.5) |>
+  nrow()   # expected 11
+
+#Graph: QUAN price around the two excluded spikes (±10 days, log scale so neighbours are visible)
+quan_all    <- prices_step7 |> filter(clean_ticker == "QUAN", !price_problem) |> arrange(clean_date)
+quan_spikes <- quan_all |> filter(spike_excluded)
+
+quan_windows <- quan_spikes |>
+  transmute(spike_date = clean_date, window = paste("Spike on", clean_date)) |>
+  cross_join(quan_all) |>
+  filter(abs(as.numeric(clean_date - spike_date)) <= 10)
+
+spike_plot <- ggplot(quan_windows, aes(clean_date, clean_price)) +
+  geom_line(colour = "grey70", linetype = "dashed") +                                   # original
+  geom_line(data = filter(quan_windows, usable_price), colour = "steelblue") +          # cleaned
+  geom_point(data = filter(quan_windows, usable_price), colour = "steelblue", size = 1.5) +
+  geom_point(data = filter(quan_windows, spike_excluded), shape = 21, size = 5, stroke = 1.2, colour = "red") +
+  geom_text(data = filter(quan_windows, spike_excluded),
+            aes(label = paste0(round(clean_price), " CZK\nexcluded")),
+            vjust = 1.8, size = 3, colour = "red") +
+  facet_wrap(~ window, scales = "free_x") +
+  scale_y_log10() +
+  labs(title = "QUAN: one-day price spikes and surrounding prices",
+       subtitle = "Dashed = original series, solid = cleaned series; red = excluded observation",
+       x = NULL, y = "Price (CZK, log scale)") +
+  theme_minimal()
+
+spike_plot
+dir.create("figures", showWarnings = FALSE)
+ggsave("figures/fig1_quan_spikes.png", spike_plot, width = 9, height = 4.5, dpi = 300)
+
+prices_dedup |> count(price_problem, volume_problem)
