@@ -1,0 +1,15 @@
+source_file,ticker,date,price,volume,currency,is_ymd,clean_date,price_currency,price_text,clean_price,clean_volume,price_problem,volume_problem,ticker_corrected,clean_ticker,official_currency,row_id,currency_case,currency_ok,clean_currency,currency_flag,n_key,n_versions,duplicate_status
+stock_prices_2024_Q2.csv,ALPH,23/05/2024,151.17,124489,USD,FALSE,2024-05-23,NA,151.17,151.17,124489,FALSE,FALSE,FALSE,ALPH,USD,1140,matches official,TRUE,USD,as stated,2,2,conflict
+stock_prices_2024_Q2.csv,ALPH,23/05/2024,127.80,124489,USD,FALSE,2024-05-23,NA,127.80,127.8,124489,FALSE,FALSE,FALSE,ALPH,USD,1891,matches official,TRUE,USD,as stated,2,2,conflict
+stock_prices_2025_Q3.csv,FODO,2025/07/30,184.08,60406,EUR,TRUE,2025-07-30,NA,184.08,184.08,60406,FALSE,FALSE,FALSE,FODO,EUR,7268,matches official,TRUE,EUR,as stated,2,2,conflict
+stock_prices_2025_Q3.csv,FODO,2025/07/30,232.93,60406,EUR,TRUE,2025-07-30,NA,232.93,232.93,60406,FALSE,FALSE,FALSE,FODO,EUR,7328,matches official,TRUE,EUR,as stated,2,2,conflict
+stock_prices_2025_Q4.csv,GRIX,21.11.2025,105.30,86710,EUR,FALSE,2025-11-21,NA,105.30,105.3,86710,FALSE,FALSE,FALSE,GRIX,EUR,8202,matches official,TRUE,EUR,as stated,2,2,conflict
+stock_prices_2025_Q4.csv,GRIX,21.11.2025,105.30,138736,EUR,FALSE,2025-11-21,NA,105.30,105.3,138736,FALSE,FALSE,FALSE,GRIX,EUR,8539,matches official,TRUE,EUR,as stated,2,2,conflict
+stock_prices_2025_Q4.csv,GROC,02.10.2025,2060.72,79596,CZK,FALSE,2025-10-02,NA,2060.72,2060.72,79596,FALSE,FALSE,FALSE,GROC,CZK,8186,matches official,TRUE,CZK,as stated,2,2,conflict
+stock_prices_2025_Q4.csv,GROC,02.10.2025,2060.72,49748,CZK,FALSE,2025-10-02,NA,2060.72,2060.72,49748,FALSE,FALSE,FALSE,GROC,CZK,8344,matches official,TRUE,CZK,as stated,2,2,conflict
+stock_prices_2025_Q2.csv,MEDI,16/06/2025,75.47 GBP,294 886,GBP,FALSE,2025-06-16,GBP,75.47,75.47,294886,FALSE,FALSE,FALSE,MEDI,GBP,5607,matches official,TRUE,GBP,as stated,2,2,conflict
+stock_prices_2025_Q2.csv,MEDI,16/06/2025,98.59,294 886,GBP,FALSE,2025-06-16,NA,98.59,98.59,294886,FALSE,FALSE,FALSE,MEDI,GBP,6484,matches official,TRUE,GBP,as stated,2,2,conflict
+stock_prices_2025_Q3.csv,MEDI,2025/07/23,76.67,94194,GBP,TRUE,2025-07-23,NA,76.67,76.67,94194,FALSE,FALSE,FALSE,MEDI,GBP,6710,matches official,TRUE,GBP,as stated,2,2,conflict
+stock_prices_2025_Q3.csv,MEDI,2025/07/23,99.99,94194,GBP,TRUE,2025-07-23,NA,99.99,99.99,94194,FALSE,FALSE,FALSE,MEDI,GBP,7456,matches official,TRUE,GBP,as stated,2,2,conflict
+stock_prices_2025_Q4.csv,MEDI,28.11.2025,77.13,98148,GBP,FALSE,2025-11-28,NA,77.13,77.13,98148,FALSE,FALSE,FALSE,MEDI,GBP,7851,matches official,TRUE,GBP,as stated,2,2,conflict
+stock_prices_2025_Q4.csv,MEDI,28.11.2025,90.15,98148,GBP,FALSE,2025-11-28,NA,90.15,90.15,98148,FALSE,FALSE,FALSE,MEDI,GBP,8295,matches official,TRUE,GBP,as stated,2,2,conflict

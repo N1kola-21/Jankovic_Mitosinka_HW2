@@ -1,0 +1,15 @@
+item,n
+imported rows,8739
+unparseable dates (excluded),8
+conflicting duplicates (excluded),14
+exact duplicates removed,10
+invalid prices (excluded),13
+one-day spikes (excluded),8
+"invalid volumes (row kept, volume NA)",9
+rows with corrected ticker,17
+rows with inferred or corrected currency,322
+usable daily prices,8686
+usable prices without CZK rate,1
+company-months,480
+invalid company-months,93
+benchmark months without return,0

@@ -387,6 +387,21 @@ ggsave("figures/fig1_quan_spikes.png", spike_plot, width = 9, height = 4.5, dpi 
 
 prices_dedup |> count(price_problem, volume_problem)
 
+#Records for review: every flagged or excluded record with the reason and decision
+records_for_review <- bind_rows(
+  unparsed_dates |>
+    mutate(issue = "date cannot be interpreted", decision = "excluded"),
+  prices_dedup |> filter(price_problem) |>
+    mutate(issue = "invalid price (missing, zero, negative or text)", decision = "excluded"),
+  prices_dedup |> filter(!price_problem, volume_problem) |>
+    mutate(issue = "invalid volume", decision = "price retained, volume set to NA"),
+  prices_step7 |> filter(spike_excluded) |>
+    mutate(issue = "one-day price spike above 50 %", decision = "excluded")
+) |>
+  select(issue, decision, source_file, ticker, clean_ticker, date, price, volume, everything())
+
+records_for_review |> count(issue, decision)
+
 #Part 3
 
 #3.1 Join cleaned prices with company info and FX data; convert to CZK
@@ -717,23 +732,119 @@ sector_monthly_summary <- stock_monthly_returns |>
   ) |>
   mutate(valid_sector_month = n_valid_companies >= 2)
 
+
+sector_relative_returns_wide <- sector_monthly_summary |>
+  select(month, sector, mean_rel_return) |>
+  pivot_wider(names_from = sector, values_from = mean_rel_return) |>
+  arrange(month)
+
+sector_relative_returns_wide
+
 #Compare by sectro
+#First attempt: mean_rel_return = mean(mean_rel_return) overwrote the column, so the median
+#and fraction were computed from the already summarised mean (median == mean, fraction 0 or 1)
 sector_regime_comparison <- sector_monthly_summary |>
   filter(valid_sector_month, !is.na(down_market)) |>
   group_by(sector, down_market) |>
   summarise(
     n_valid_sector_months = n(),
-    mean_rel_return       = mean(mean_rel_return),
+    avg_rel_return        = mean(mean_rel_return),
     median_rel_return     = median(mean_rel_return),
     frac_outperforming    = mean(mean_rel_return > 0),
     .groups               = "drop"
   ) |>
-  arrange(down_market, desc(mean_rel_return))
+  arrange(down_market, desc(avg_rel_return))
 
 sector_regime_comparison
 
 
+#Part 5
 
+#Data for graphs 2 and 3: only valid sector-months (at least 2 companies, benchmark available)
+sector_plot_data <- sector_monthly_summary |>
+  filter(valid_sector_month) |>
+  mutate(month_date = as.Date(paste0(month, "-01")),
+         market     = if_else(down_market, "Down-market month", "Other month"))
 
+#Graph 2: monthly benchmark-relative performance of each sector over time
+fig2_sector_time <- ggplot(sector_plot_data, aes(month_date, mean_rel_return * 100)) +
+  geom_hline(yintercept = 0, colour = "grey50") +
+  geom_line(colour = "grey60") +
+  geom_point(aes(colour = market), size = 2) +
+  facet_wrap(~ sector) +
+  labs(title = "Monthly benchmark-relative return by sector",
+       subtitle = "Mean company return minus benchmark return (0 = same as the market)",
+       x = NULL, y = "Relative return (percentage points)", colour = NULL) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
 
+fig2_sector_time
+ggsave("figures/fig2_sector_time.png", fig2_sector_time, width = 9, height = 6, dpi = 300)
+
+#Graph 3: distribution of sector relative returns in down-market vs other months
+fig3_sector_regimes <- ggplot(sector_plot_data, aes(market, mean_rel_return * 100)) +
+  geom_hline(yintercept = 0, colour = "grey50") +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(colour = market), width = 0.15, size = 1.5, alpha = 0.7) +
+  facet_wrap(~ sector, nrow = 1) +
+  labs(title = "Sector relative returns in down-market and other months",
+       subtitle = "Each point is one sector-month",
+       x = NULL, y = "Relative return (percentage points)") +
+  theme_minimal() +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 30, hjust = 1))
+
+fig3_sector_regimes
+ggsave("figures/fig3_sector_regimes.png", fig3_sector_regimes, width = 10, height = 5, dpi = 300)
+
+#Part 6
+dir.create("data/processed", recursive = TRUE, showWarnings = FALSE)
+
+#Clean daily panel for export: usable prices with CZK prices, returns and quality flags
+prices_clean_export <- prices_part3 |>
+  filter(usable_price) |>
+  mutate(clean_volume = if_else(volume_problem, NA_real_, clean_volume))
+
+#Audit summary: counts of imported, corrected, rejected and unusable records / months
+audit_summary <- tibble(
+  item = c("imported rows", "unparseable dates (excluded)", "conflicting duplicates (excluded)",
+           "exact duplicates removed", "invalid prices (excluded)", "one-day spikes (excluded)",
+           "invalid volumes (row kept, volume NA)", "rows with corrected ticker",
+           "rows with inferred or corrected currency", "usable daily prices",
+           "usable prices without CZK rate", "company-months", "invalid company-months",
+           "benchmark months without return"),
+  n = c(nrow(raw_prices), nrow(unparsed_dates), nrow(duplicate_conflicts),
+        sum(prices_step6$duplicate_status %in% c("unique", "exact duplicate")) - nrow(prices_dedup),
+        sum(prices_dedup$price_problem), sum(prices_step7$spike_excluded),
+        sum(prices_clean_export$volume_problem), sum(prices_clean_export$ticker_corrected),
+        sum(prices_clean_export$currency_flag != "as stated" &
+              prices_clean_export$currency_flag != "taken from price text"),
+        nrow(prices_clean_export), sum(!prices_clean_export$usable_czk),
+        nrow(stock_monthly_returns), sum(!stock_monthly_returns$valid_month),
+        sum(is.na(benchmark_monthly_returns$benchmark_return_czk)))
+)
+audit_summary
+
+#Export
+write_csv(prices_clean_export,          "data/processed/prices_clean.csv")
+write_csv(duplicate_conflicts,          "data/processed/duplicate_conflicts.csv")
+write_csv(records_for_review,           "data/processed/records_for_review.csv")
+write_csv(stock_monthly_returns,        "data/processed/stock_monthly_returns.csv")
+write_csv(sector_monthly_summary,       "data/processed/sector_monthly_summary.csv")
+write_csv(company_returns_wide,         "data/processed/company_returns_wide.csv")
+write_csv(sector_relative_returns_wide, "data/processed/sector_relative_returns_wide.csv")
+write_csv(audit_summary,                "data/processed/audit_summary.csv")
+
+#Save and reload the clean daily panel as .rds, verify it is unchanged
+saveRDS(prices_clean_export, "data/processed/prices_clean.rds")
+prices_clean_reloaded <- readRDS("data/processed/prices_clean.rds")
+identical(prices_clean_export, prices_clean_reloaded)            # TRUE
+
+#Final checks
+prices_clean_export |> count(clean_ticker, clean_date) |> filter(n > 1) |> nrow()   # 0 = unique keys
+all(prices_clean_export$clean_ticker %in% companies$ticker)                          # valid identifiers
+all(prices_clean_export$clean_price > 0)                                             # valid prices
+nrow(stock_monthly_returns) == nrow(companies) * 24                                  # no duplicated company-months
+nrow(company_returns_wide) == nrow(companies)                                        # one row per company
+nrow(company_returns_long_check) == nrow(stock_monthly_returns)                      # pivoting kept all cells
+nrow(sector_relative_returns_wide) == 24                                             # one row per month
 
