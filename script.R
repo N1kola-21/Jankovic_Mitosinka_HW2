@@ -540,6 +540,7 @@ benchmark_3_2 |> count(fx_status, fx_imputed, usable_czk)
 
 #3.3
 
+# Compute simple CZK returns and day gaps strictly across consecutive usable observations per company
 company_returns_calc <- prices_3_2 |>
   filter(usable_czk) |>
   arrange(clean_ticker, clean_date) |>
@@ -554,11 +555,13 @@ company_returns_calc <- prices_3_2 |>
 
 head(company_returns_calc)
 
+#Join it back to the full panel
 prices_part3 <- prices_3_2 |>
   left_join(company_returns_calc, by = "row_id")
 
 head(prices_part3)
 
+#We repeat the same process for benchmark
 benchmark_returns_calc <- benchmark_3_2 |>
   filter(usable_czk) |>
   arrange(clean_date) |>
@@ -575,6 +578,8 @@ benchmark_part3 <- benchmark_3_2 |>
 head(benchmark_part3)
 
 #Final checks for part 3
+
+#Verify nrow
 stopifnot(
   nrow(prices_part3) == nrow(prices_step7),
   nrow(benchmark_part3) == nrow(benchmark_clean),
