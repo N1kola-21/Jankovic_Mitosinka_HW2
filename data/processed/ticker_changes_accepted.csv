@@ -1,0 +1,15 @@
+observed_ticker,official_ticker,reason
+ALP,ALPH,only candidate with price within 5% on nearest date
+FOD,FOOD,only candidate with price within 5% on nearest date
+FODX,FODO,only candidate with price within 5% on nearest date
+FOO,FODO,only candidate with price within 5% on nearest date
+GRI,GRID,only candidate with price within 5% on nearest date
+GR_ID,GRID,only candidate with price within 5% on nearest date
+N0RX,NURX,only candidate with price within 5% on nearest date
+NU_RX,NURX,only candidate with price within 5% on nearest date
+ORN,IORN,only candidate with price within 5% on nearest date
+QUAX,QUAN,only candidate with price within 5% on nearest date
+UIL,BUIL,only candidate with price within 5% on nearest date
+V0TO,VITO,only candidate with price within 5% on nearest date
+VIT,VITA,only candidate with price within 5% on nearest date
+VI_TO,VITO,only candidate with price within 5% on nearest date
