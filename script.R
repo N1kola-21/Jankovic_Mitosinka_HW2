@@ -386,3 +386,203 @@ dir.create("figures", showWarnings = FALSE)
 ggsave("figures/fig1_quan_spikes.png", spike_plot, width = 9, height = 4.5, dpi = 300)
 
 prices_dedup |> count(price_problem, volume_problem)
+
+#Part 3
+
+#3.1 Join cleaned prices with company info and FX data; convert to CZK
+class(benchmark)
+# Parse benchmark columns (imported as character in Part 1)
+benchmark_clean <- benchmark |>
+  mutate(
+    clean_date = ymd(date),
+    price_usd  = as.numeric(price)
+  ) |>
+  arrange(clean_date)
+
+# Check benchmark for missing values or duplicate dates
+stopifnot(
+  sum(is.na(benchmark_clean$clean_date)) == 0,
+  sum(is.na(benchmark_clean$price_usd)) == 0,
+  nrow(benchmark_clean) == n_distinct(benchmark_clean$clean_date)
+)
+
+# Check fx_daily for duplicate (date, currency) pairs before joining
+fx_dups <- fx_daily |>
+  group_by(date, currency) |>
+  filter(n() > 1) |>
+  arrange(currency, date)
+
+fx_dups
+
+#We found three duplicate entries
+
+# Deduplicate fx_daily: keep one row for exact duplicates; drop if conflicting rates exist
+fx_dedup <- fx_daily |>
+  group_by(date, currency) |>
+  mutate(n_rates = n_distinct(czk_per_unit)) |>
+  ungroup() |>
+  filter(n_rates == 1) |>
+  distinct(date, currency, .keep_all = TRUE) |>
+  select(date, currency, czk_per_unit)
+
+head(fx_dedup)
+
+# Check that (date, currency) is now unique
+stopifnot(nrow(fx_dedup) == nrow(distinct(fx_dedup, date, currency)))
+
+# join cleaned prices with ...
+
+prices_3_1 <- prices_step7 |>
+  left_join(
+    companies |> select(ticker, company, sector),
+    by = c("clean_ticker" = "ticker")
+  ) |>
+  left_join(
+    fx_dedup,
+    by = c("clean_date" = "date", "clean_currency" = "currency")
+  ) |>
+  mutate(
+    price_czk = if_else(
+      usable_price & !is.na(czk_per_unit),
+      clean_price * czk_per_unit,
+      NA_real_
+    )
+  )
+
+# Join USd benchmark with FX data
+benchmark_3_1 <- benchmark_clean |>
+  left_join(
+    fx_dedup,
+    by = c("clean_date" = "date", "currency" = "currency")
+  ) |>
+  mutate(
+    price_czk = if_else(!is.na(czk_per_unit), price_usd * czk_per_unit, NA_real_)
+  )
+
+# Check unmatched records and unintended row multiplication
+stopifnot(
+  nrow(prices_3_1) == nrow(prices_step7),
+  nrow(benchmark_3_1) == nrow(benchmark_clean)
+)
+
+sum(is.na(prices_3_1$sector))                              
+sum(prices_3_1$usable_price & is.na(prices_3_1$czk_per_unit))
+sum(is.na(benchmark_3_1$czk_per_unit))
+
+#3.2. 
+#For missing exchange rates we use the chronologically last observation
+#We flag all imputed values
+all_trading_dates <- sort(unique(c(
+  benchmark_clean$clean_date,
+  na.omit(prices_step7$clean_date)
+)))
+
+fx_locf <- expand_grid(
+  date     = all_trading_dates,
+  currency = unique(fx_dedup$currency)
+) |>
+  left_join(fx_dedup, by = c("date", "currency")) |>
+  arrange(currency, date) |>
+  group_by(currency) |>
+  mutate(
+    fx_rate_locf = czk_per_unit
+  ) |>
+  fill(fx_rate_locf, .direction = "down") |>
+  ungroup() |>
+  mutate(
+    fx_imputed = is.na(czk_per_unit) & !is.na(fx_rate_locf),
+    fx_status  = case_when(
+      !is.na(czk_per_unit) ~ "observed",
+      fx_imputed           ~ "imputed",
+      TRUE                 ~ "unavailable (no prior rate)"
+    )
+  ) |>
+  select(date, currency, fx_rate_locf, fx_imputed, fx_status)
+
+#Now we apply the imputed rates to company prices and recalculate CZK prices
+prices_3_2 <- prices_3_1 |>
+  left_join(
+    fx_locf,
+    by = c("clean_date" = "date", "clean_currency" = "currency")
+  ) |>
+  mutate(
+    fx_rate_used = coalesce(czk_per_unit, fx_rate_locf),
+    price_czk    = if_else(
+      usable_price & !is.na(fx_rate_used),
+      clean_price * fx_rate_used,
+      NA_real_
+    ),
+    usable_czk   = !is.na(price_czk)
+  )
+
+#Now we join it with benchmark while retaining original dates
+
+benchmark_3_2 <- benchmark_3_1 |>
+  left_join(
+    fx_locf,
+    by = c("clean_date" = "date", "currency" = "currency")
+  ) |>
+  mutate(
+    fx_rate_used = coalesce(czk_per_unit, fx_rate_locf),
+    price_czk    = if_else(!is.na(fx_rate_used), price_usd * fx_rate_used, NA_real_),
+    usable_czk   = !is.na(price_czk)
+  )
+
+#Verify that nrow didnt change
+stopifnot(
+  nrow(prices_3_2) == nrow(prices_3_1),
+  nrow(benchmark_3_2) == nrow(benchmark_3_1)
+)
+
+prices_3_2 |> count(fx_status, fx_imputed, usable_czk)
+benchmark_3_2 |> count(fx_status, fx_imputed, usable_czk)
+
+
+#3.3
+
+company_returns_calc <- prices_3_2 |>
+  filter(usable_czk) |>
+  arrange(clean_ticker, clean_date) |>
+  group_by(clean_ticker) |>
+  mutate(
+    prev_usable_date  = lag(clean_date),
+    daily_return_czk  = price_czk / lag(price_czk) - 1,
+    calendar_days_gap = as.numeric(clean_date - prev_usable_date)
+  ) |>
+  ungroup() |>
+  select(row_id, prev_usable_date, daily_return_czk, calendar_days_gap)
+
+head(company_returns_calc)
+
+prices_part3 <- prices_3_2 |>
+  left_join(company_returns_calc, by = "row_id")
+
+head(prices_part3)
+
+benchmark_returns_calc <- benchmark_3_2 |>
+  filter(usable_czk) |>
+  arrange(clean_date) |>
+  mutate(
+    prev_usable_date  = lag(clean_date),
+    daily_return_czk  = price_czk / lag(price_czk) - 1,
+    calendar_days_gap = as.numeric(clean_date - prev_usable_date)
+  ) |>
+  select(clean_date, prev_usable_date, daily_return_czk, calendar_days_gap)
+
+benchmark_part3 <- benchmark_3_2 |>
+  left_join(benchmark_returns_calc, by = "clean_date")
+
+head(benchmark_part3)
+
+#Final checks for part 3
+stopifnot(
+  nrow(prices_part3) == nrow(prices_step7),
+  nrow(benchmark_part3) == nrow(benchmark_clean),
+  all(is.na(prices_part3$daily_return_czk[!prices_part3$usable_czk]))
+)
+
+summary(prices_part3$daily_return_czk)
+summary(prices_part3$calendar_days_gap)
+summary(benchmark_part3$daily_return_czk)
+summary(benchmark_part3$calendar_days_gap)
+
