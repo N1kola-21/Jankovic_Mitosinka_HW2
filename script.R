@@ -591,3 +591,149 @@ summary(prices_part3$calendar_days_gap)
 summary(benchmark_part3$daily_return_czk)
 summary(benchmark_part3$calendar_days_gap)
 
+
+#Part 4
+#4.1
+# Helper function: longest consecutive run of TRUE values (missing trading days)
+longest_true_run <- function(x) {
+  if (length(x) == 0 || !any(x)) return(0L)
+  r <- rle(x)
+  max(r$lengths[r$values])
+}
+
+#We build a complete company x trading date panel with the original benchmark dates
+company_calendar <- expand_grid(
+  clean_ticker = companies$ticker,
+  clean_date   = sort(unique(benchmark_part3$clean_date))
+) |>
+  left_join(companies |> select(ticker, sector), by = c("clean_ticker" = "ticker")) |>
+  left_join(
+    prices_part3 |> filter(usable_czk) |> select(clean_ticker, clean_date, price_czk, usable_czk),
+    by = c("clean_ticker", "clean_date")
+  ) |>
+  mutate(
+    month      = format(clean_date, "%Y-%m"),
+    usable_czk = replace_na(usable_czk, FALSE)
+  ) |>
+  arrange(clean_ticker, clean_date)
+
+head(company_calendar)
+
+stock_monthly_returns <- company_calendar |>
+  group_by(clean_ticker, sector, month) |>
+  summarise(
+    n_valid_obs     = sum(usable_czk),
+    max_missing_run = longest_true_run(!usable_czk),
+    first_price_czk = first(price_czk),
+    last_price_czk  = last(price_czk),
+    .groups         = "drop"
+  ) |>
+  mutate(
+    # A company-month is valid only with >= 15 usable prices and <= 3 consecutive missing trading days
+    valid_month        = (n_valid_obs >= 15) & (max_missing_run <= 3),
+    monthly_return_czk = if_else(valid_month, last_price_czk / first_price_czk - 1, NA_real_)
+  )
+
+stock_monthly_returns |> filter(valid_month, is.na(monthly_return_czk))
+#The method does not work. If the company was not traded on the first/last days of the month it results in NA's
+
+stock_monthly_returns <- company_calendar |>
+  group_by(clean_ticker, sector, month) |>
+  summarise(
+    n_valid_obs     = sum(usable_czk),
+    max_missing_run = longest_true_run(!usable_czk),
+    first_date      = if_else(n_valid_obs >= 1, first(clean_date[usable_czk]), as.Date(NA)),
+    last_date       = if_else(n_valid_obs >= 1, last(clean_date[usable_czk]), as.Date(NA)),
+    first_price_czk = if_else(n_valid_obs >= 1, first(price_czk[usable_czk]), NA_real_),
+    last_price_czk  = if_else(n_valid_obs >= 1, last(price_czk[usable_czk]), NA_real_),
+    .groups         = "drop"
+  ) |>
+  mutate(
+    valid_month        = (n_valid_obs >= 15) & (max_missing_run <= 3),
+    monthly_return_czk = if_else(valid_month, last_price_czk / first_price_czk - 1, NA_real_)
+  )
+
+stock_monthly_returns |> filter(valid_month, is.na(monthly_return_czk))
+#We do not get any more NAs this method worked
+
+#We also do monthly CZk returns for benchmark
+benchmark_monthly_returns <- benchmark_part3 |>
+  mutate(month = format(clean_date, "%Y-%m")) |>
+  arrange(clean_date) |>
+  group_by(month) |>
+  summarise(
+    n_valid_obs          = sum(usable_czk),
+    benchmark_return_czk = if_else(
+      n_valid_obs >= 2,
+      last(price_czk[usable_czk]) / first(price_czk[usable_czk]) - 1,
+      NA_real_
+    ),
+    .groups = "drop"
+  ) |>
+  mutate(down_market = benchmark_return_czk < 0)
+
+benchmark_monthly_returns |> filter(is.na(benchmark_return_czk))
+
+#4.2
+
+#Company-by-month wide 
+
+#Reshape 1 row per company, 24 monthly columns
+company_returns_wide <- stock_monthly_returns |>
+  select(ticker = clean_ticker, sector, month, monthly_return_czk) |>
+  pivot_wider(names_from = month, values_from = monthly_return_czk)
+
+head(company_returns_wide)
+
+#Pivot back to long to verify integrity
+company_returns_long_check <- company_returns_wide |>
+  pivot_longer(cols = matches("^\\d{4}-\\d{2}$"), names_to = "month", values_to = "return")
+
+
+#Verify
+stopifnot(identical(
+  stock_monthly_returns |> filter(!is.na(monthly_return_czk)) |>
+    select(ticker = clean_ticker, sector, month, return = monthly_return_czk) |> arrange(ticker, month),
+  company_returns_long_check |> filter(!is.na(return)) |> arrange(ticker, month)
+))
+
+
+#4.3
+#Computate benchmark relative returns
+sector_monthly_summary <- stock_monthly_returns |>
+  left_join(benchmark_monthly_returns |> select(month, benchmark_return_czk, down_market), by = "month") |>
+  mutate(
+    rel_return   = if_else(valid_month & !is.na(benchmark_return_czk), monthly_return_czk - benchmark_return_czk, NA_real_),
+    outperformed = rel_return > 0
+  ) |>
+  group_by(sector, month, down_market) |>
+  summarise(
+    n_valid_companies   = sum(!is.na(rel_return)),
+    # Only report sector-month metrics when at least 2 companies have valid returns
+    mean_company_return = if_else(n_valid_companies >= 2, mean(monthly_return_czk[valid_month], na.rm = TRUE), NA_real_),
+    mean_rel_return     = if_else(n_valid_companies >= 2, mean(rel_return, na.rm = TRUE), NA_real_),
+    frac_outperforming  = if_else(n_valid_companies >= 2, mean(outperformed, na.rm = TRUE), NA_real_),
+    .groups             = "drop"
+  ) |>
+  mutate(valid_sector_month = n_valid_companies >= 2)
+
+#Compare by sectro
+sector_regime_comparison <- sector_monthly_summary |>
+  filter(valid_sector_month, !is.na(down_market)) |>
+  group_by(sector, down_market) |>
+  summarise(
+    n_valid_sector_months = n(),
+    mean_rel_return       = mean(mean_rel_return),
+    median_rel_return     = median(mean_rel_return),
+    frac_outperforming    = mean(mean_rel_return > 0),
+    .groups               = "drop"
+  ) |>
+  arrange(down_market, desc(mean_rel_return))
+
+sector_regime_comparison
+
+
+
+
+
+
