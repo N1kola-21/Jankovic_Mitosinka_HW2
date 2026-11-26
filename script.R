@@ -146,14 +146,7 @@ ticker_evidence <- ticker_review |>
 
 ticker_evidence |> print(n = Inf, width = Inf)
 
-#do the observed rows share dates with the candidate? (0 = it fills gaps -> same company likely)
-ticker_evidence |>
-  rowwise() |>
-  mutate(shared_dates = sum(prices_step2$clean_date[prices_step2$ticker == observed_ticker] %in%
-                              prices_step2$clean_date[prices_step2$ticker == candidates])) |>
-  select(observed_ticker, candidates, shared_dates)
-
-#Stronger evidence: observed price vs candidate's price on the nearest date
+#Evidence: observed price vs candidate price on the nearest date
 nearest_candidate_price <- function(cand_ticker, date) {
   cand <- prices_step2[prices_step2$ticker == cand_ticker & !prices_step2$price_problem &
                          !is.na(prices_step2$clean_date), ]
@@ -173,7 +166,7 @@ nearest_check <- ticker_evidence |>
 
 nearest_check |> print(n = Inf)
 
-#Decision rule: accept a candidate only if ALL observed prices are within 5 % of the candidate's
+#Decision rule: accept a candidate only if ALL observed prices are inside a 5 % of the candidate's
 #price on the nearest date, and exactly one candidate satisfies this. Otherwise unresolved.
 ticker_decisions <- nearest_check |>
   group_by(observed_ticker, candidates) |>
@@ -357,7 +350,7 @@ prices_step7 |>
   filter(abs(change) > 0.5) |>
   nrow()   # expected 11
 
-#Graph: QUAN price around the two excluded spikes (±10 days, log scale so neighbours are visible)
+#Graph: QUAN price around the two excluded spikes (10 days, log scale so neighbours are visible)
 quan_all    <- prices_step7 |> filter(clean_ticker == "QUAN", !price_problem) |> arrange(clean_date)
 quan_spikes <- quan_all |> filter(spike_excluded)
 
@@ -384,8 +377,6 @@ spike_plot <- ggplot(quan_windows, aes(clean_date, clean_price)) +
 spike_plot
 dir.create("figures", showWarnings = FALSE)
 ggsave("figures/fig1_quan_spikes.png", spike_plot, width = 9, height = 4.5, dpi = 300)
-
-prices_dedup |> count(price_problem, volume_problem)
 
 #Records for review: every flagged or excluded record with the reason and decision
 records_for_review <- bind_rows(
